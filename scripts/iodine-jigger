@@ -1,0 +1,91 @@
+#!/bin/sh -e
+
+echo Creating IP-over-DNS tunnel over local connection...
+
+subdomain=your-subdomain.example.com
+passwd=yourpassword
+testhost=slashdot.org
+i=$(tail --lines=+3 /proc/net/wireless \
+    | head -1 | tr -d : | awk '{print $1}')
+
+echo local interface: $i
+
+echo Killing existing tunnels...
+if killall --quiet --wait --verbose --signal HUP iodine; then
+    sleep 2
+fi
+
+echo Bouncing local connection...
+ifdown --force $i || true
+ifup $i
+
+router=$(ip -4 route list dev $i \
+    | awk '$1=="default" {print $3; exit} END {exit 1}')
+if [ -z ${router} ]; then
+    ## This can happen when the default local route is already deleted
+    echo warning: using default local router IP address
+    router=10.0.0.4
+fi
+echo local router: ${router}
+
+## DNS servers
+nameservers=$(awk '$1=="nameserver" {print $2}' /etc/resolv.conf)
+if [ -n "${nameservers}" ]; then
+    echo nameservers: ${nameservers}
+else
+    echo error: no DNS servers found
+    exit 1
+fi
+
+## Test DNS service
+testhostip=$(host -q -t A ${testhost} | awk '$2=="A" {print $3}')
+if [ -n "${testhostip}" ]; then
+    echo DNS available: test host ${testhost} has IP ${testhostip}
+else
+    echo warning: DNS lookup failure for ${testhost}
+fi
+
+## Test if local network is up
+echo Ping test of  local router and nameserver...
+fping -C1 ${router} ${nameservers}
+
+## Add routes to nameservers
+for n in ${nameservers}; do
+    ip -4 route add ${n}/32 via ${router}
+done
+
+## Bring up tunnel
+echo Creating IP-over-DNS tunnel...
+iodine -P ${passwd} ${subdomain}
+
+d=$(ifconfig -a | egrep '^dns' | awk '{print $1}' | head -1)
+
+## Find DNS interface
+if [ -z "$d" ]; then
+    echo warning: cannot find DNS interface, using default
+    d=dns0
+fi
+echo DNS interface: $d 
+
+## Figure out other end of tunnel, assuming server uses final octet .1
+tunnel=$(ip -4 address show dev $d \
+    | awk '$1=="inet" {print gensub("[.][0-9]*/.*", ".1", 1, $2)}')
+if [ -n ${tunnel} ]; then
+    echo tunnel remote endpoint: ${tunnel}
+else
+    echo error: cannot find tunnel remote endpoint
+    exit 1
+fi
+
+echo Ping test of local router, nameserver, and tunnel...
+fping -C1 ${router} ${nameservers} ${tunnel}
+
+echo Setting default route through tunnel...
+## Remove default via local router
+ip -4 route del default via ${router}
+## Add default via tunnel
+ip -4 route add default via ${tunnel}
+
+## Test if all is well
+echo Ping test of local router, nameserver, tunnel, and external host...
+fping -C1 ${router} ${nameservers} ${tunnel} ${testhostip}
