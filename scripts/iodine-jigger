@@ -19,8 +19,7 @@ echo Bouncing local connection...
 ifdown --force $i || true
 ifup $i
 
-router=$(ip -4 route list dev $i \
-    | awk '$1=="default" {print $3; exit} END {exit 1}')
+router=$(ip -4 route list dev $i | awk '$1=="default" {print $3}' | head -1)
 if [ -z ${router} ]; then
     ## This can happen when the default local route is already deleted
     echo warning: using default local router IP address
@@ -57,6 +56,10 @@ done
 ## Bring up tunnel
 echo Creating IP-over-DNS tunnel...
 iodine -P ${passwd} ${subdomain}
+
+## If local DNS server restricts to 512 byte packets then do this:
+# ifconfig $d mtu 220
+## default MTU is 1024
 
 d=$(ifconfig -a | egrep '^dns' | awk '{print $1}' | head -1)
 
