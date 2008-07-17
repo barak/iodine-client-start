@@ -1,31 +1,82 @@
 #!/bin/sh -e
 
+## OPTIONS TO SET
+
+if [ -r ${iodine_client_rc:=/etc/default/iodine_client} ]; then
+    . ${iodine_client_rc}
+else
+    echo warning: cannot read ${iodine_client_rc}
+fi
+
+echo "${subdomain:=your-subdomain.example.com}" > /dev/null
+echo "${passwd:=yourpassword}"                  > /dev/null
+
+echo "${testhost:=slashdot.org}"                > /dev/null
+
+echo "${bounce_localnet:=true}"                 > /dev/null
+echo "${test_ping_localnet:=true}"              > /dev/null
+echo "${test_ping_tunnel=true}"                 > /dev/null
+echo "${test_ping_final=true}"                  > /dev/null
+
+## DEBIAN PACKAGES TO INSTALL:
+##  iodine (for /usr/sbin/iodine)
+##  iproute (for /bin/ip)
+##  ipcalc (for /usr/bin/ipcalc)
+##  dnsutils (for /usr/bin/dig)
+##  fping (for /usr/bin/fping)
+
+## If local DNS server restricts to 512 byte packets then do this:
+# ifconfig ${d} mtu 220
+## default MTU is 1024
+
 echo Creating IP-over-DNS tunnel over local connection...
 
-subdomain=your-subdomain.example.com
-passwd=yourpassword
-testhost=slashdot.org
 i=$(tail --lines=+3 /proc/net/wireless \
     | head -1 | tr -d : | awk '{print $1}')
 
-echo local interface: $i
+if [ -z ${i} ]; then
+    read -p " no WiFi interface found, specify interface to use: " i
+fi
+
+echo local interface: ${i}
 
 echo Killing existing tunnels...
 if killall --quiet --wait --verbose --signal HUP iodine; then
     sleep 2
 fi
 
-echo Bouncing local connection...
-ifdown --force $i || true
-ifup $i
+if ${bounce_localnet}; then
+    echo Bouncing local network connection...
+    ifdown --force ${i} || true
+    ifup ${i}
+fi
 
-router=$(ip -4 route list dev $i | awk '$1=="default" {print $3}' | head -1)
+addr=$(ip -4 addr show dev ${i} scope global | tail -1 | awk '{print $2}')
+class=$(echo ${addr} | sed 'sX^.*/XX')
+echo local address: ${addr} ${class}
+local_net=$(ipcalc --nobinary ${addr} | awk '$1=="Network:" {print $2}')
+echo local net: ${local_net}
+
+router=$(ip -4 route list dev ${i} | awk '$1=="default" {print $3}' | head -1)
 if [ -z ${router} ]; then
     ## This can happen when the default local route is already deleted
-    echo warning: using default local router IP address
-    router=10.0.0.4
+    echo warning: no default route, guessing local router IP address
+    if true; then
+	## Minimum address on local net is usually right
+	router=$(ipcalc --nobinary ${addr} | awk '$1=="HostMin:" {print $2}')
+    else
+	## But sometimes ned to hardwire...
+	router=10.0.0.4
+    fi
 fi
+
 echo local router: ${router}
+
+## Test DNS service
+testhost_ip=$(dig +short -t A -q ${testhost})
+if [ -z ${testhost_ip} ]; then
+    echo warning: DNS lookup failure for ${testhost}
+fi
 
 ## DNS servers
 nameservers=$(awk '$1=="nameserver" {print $2}' /etc/resolv.conf)
@@ -36,42 +87,39 @@ else
     exit 1
 fi
 
-## Test DNS service
-testhostip=$(host -q -t A ${testhost} | awk '$2=="A" {print $3}')
-if [ -n "${testhostip}" ]; then
-    echo DNS available: test host ${testhost} has IP ${testhostip}
-else
-    echo warning: DNS lookup failure for ${testhost}
+## Test if local network is up
+if ${test_ping_localnet}; then
+    echo Ping test of  local router and nameserver...
+    fping -C1 ${router} ${nameservers} \
+	|| echo warning: ping test failed
 fi
 
-## Test if local network is up
-echo Ping test of  local router and nameserver...
-fping -C1 ${router} ${nameservers}
-
-## Add routes to nameservers
+echo Adding point-to-point routes for non-local nameservers
 for n in ${nameservers}; do
-    ip -4 route add ${n}/32 via ${router}
+    n_net=$(ipcalc --nobinary ${n}/${class} | awk '$1=="Network:" {print $2}')
+    if [ "${n_net}" != "${local_net}" ]; then
+	echo DNS server ${n}: adding point-to-point route
+	ip -4 route add ${n}/32 via ${router}
+    else
+	echo DNS server ${n}: on local network
+    fi
 done
 
 ## Bring up tunnel
 echo Creating IP-over-DNS tunnel...
 iodine -P ${passwd} ${subdomain}
 
-## If local DNS server restricts to 512 byte packets then do this:
-# ifconfig $d mtu 220
-## default MTU is 1024
-
 d=$(ifconfig -a | egrep '^dns' | awk '{print $1}' | head -1)
 
 ## Find DNS interface
-if [ -z "$d" ]; then
+if [ -z "${d}" ]; then
     echo warning: cannot find DNS interface, using default
     d=dns0
 fi
-echo DNS interface: $d 
+echo DNS interface: ${d}
 
 ## Figure out other end of tunnel, assuming server uses final octet .1
-tunnel=$(ip -4 address show dev $d \
+tunnel=$(ip -4 address show dev ${d} \
     | awk '$1=="inet" {print gensub("[.][0-9]*/.*", ".1", 1, $2)}')
 if [ -n ${tunnel} ]; then
     echo tunnel remote endpoint: ${tunnel}
@@ -80,8 +128,10 @@ else
     exit 1
 fi
 
-echo Ping test of local router, nameserver, and tunnel...
-fping -C1 ${router} ${nameservers} ${tunnel}
+if ${test_ping_tunnel}; then
+    echo Ping test of local router, nameserver, and tunnel...
+    fping -C1 ${router} ${nameservers} ${tunnel}
+fi
 
 echo Setting default route through tunnel...
 ## Remove default via local router
@@ -90,5 +140,7 @@ ip -4 route del default via ${router}
 ip -4 route add default via ${tunnel}
 
 ## Test if all is well
-echo Ping test of local router, nameserver, tunnel, and external host...
-fping -C1 ${router} ${nameservers} ${tunnel} ${testhostip}
+if ${test_ping_final}; then
+    echo Ping test of local router, nameserver, tunnel, and external host...
+    fping -C1 ${router} ${nameservers} ${tunnel} ${testhost_ip:${testhost}}
+fi
