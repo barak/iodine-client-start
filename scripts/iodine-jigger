@@ -1,22 +1,54 @@
-#!/bin/sh -e
+#! /bin/bash
 
-## OPTIONS TO SET
+### Script to set up an iodine tunnel route traffic through it
+###
+### Copyright 2008 Barak A. Pearlmutter <bap@debian.org>
+###
+### License: MIT
+###
+### Permission to use, copy, modify, and distribute this software for
+### any purpose with or without fee is hereby granted, provided that
+### the above copyright notice and this permission notice appear in
+### all copies.
+###
+### THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL
+### WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED
+### WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE
+### AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR
+### CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+### LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT,
+### NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+### CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-if [ -r ${iodine_client_rc:=/etc/default/iodine_client} ]; then
+## Cause script to bail immediately on failed command
+set -e
+
+## Options for user to set.
+
+## Minimal customization: put the two lines
+##  subdomain=your.tunnel.sub.domain
+##  passwd=password_for_that_tunnel
+## in the file /etc/default/iodine-client.
+
+echo "${iodine_client_rc:=/etc/default/iodine-client}" > /dev/null
+
+if [ -r ${iodine_client_rc} ]; then
     . ${iodine_client_rc}
 else
-    echo warning: cannot read ${iodine_client_rc}
+    echo WARNING: Cannot read ${iodine_client_rc}
 fi
 
-echo "${subdomain:=your-subdomain.example.com}" > /dev/null
-echo "${passwd:=yourpassword}"                  > /dev/null
+echo "${subdomain:=your-subdomain.example.com}"	> /dev/null
+echo "${passwd:=yourpassword}"			> /dev/null
 
-echo "${testhost:=slashdot.org}"                > /dev/null
+echo "${testhost:=slashdot.org}"		> /dev/null
 
-echo "${bounce_localnet:=true}"                 > /dev/null
-echo "${test_ping_localnet:=true}"              > /dev/null
-echo "${test_ping_tunnel=true}"                 > /dev/null
-echo "${test_ping_final=true}"                  > /dev/null
+echo "${bounce_localnet:=true}"			> /dev/null
+echo "${test_ping_localnet:=true}"		> /dev/null
+echo "${test_ping_tunnel=true}"			> /dev/null
+echo "${test_ping_final=true}"			> /dev/null
+
+echo "${default_router}"			> /dev/null
 
 ## DEBIAN PACKAGES TO INSTALL:
 ##  iodine (for /usr/sbin/iodine)
@@ -29,111 +61,119 @@ echo "${test_ping_final=true}"                  > /dev/null
 # ifconfig ${d} mtu 220
 ## default MTU is 1024
 
-echo Creating IP-over-DNS tunnel over local connection...
+echo ==== Creating IP-over-DNS tunnel over local connection...
 
-i=$(tail --lines=+3 /proc/net/wireless \
-    | head -1 | tr -d : | awk '{print $1}')
 
-if [ -z ${i} ]; then
-    read -p " no WiFi interface found, specify interface to use: " i
+if [ -z ${interface} ]; then
+    interface=$(tail --lines=+3 /proc/net/wireless \
+	| head -1 | tr -d : | awk '{print $1}')
 fi
 
-echo local interface: ${i}
+if [ -z ${interface} ]; then
+    interface=$(ifconfig -a | egrep '^[^ ].*encap:Ethernet' \
+	| head -1 | awk '{print $1}')
+fi
 
-echo Killing existing tunnels...
+if [ -z ${interface} ]; then
+    echo ERROR: No network interface found
+    exit 1
+fi
+
+echo ==== Local network interface: ${interface}
+
+echo ==== Killing existing DNS tunnels...
 if killall --quiet --wait --verbose --signal HUP iodine; then
     sleep 2
 fi
 
 if ${bounce_localnet}; then
-    echo Bouncing local network connection...
-    ifdown --force ${i} || true
-    ifup ${i}
+    echo ==== Bouncing local network connection...
+    ifdown --force ${interface} || true
+    ifup ${interface}
 fi
 
-addr=$(ip -4 addr show dev ${i} scope global | tail -1 | awk '{print $2}')
-class=$(echo ${addr} | sed 'sX^.*/XX')
-echo local address: ${addr} ${class}
+addr=$(ip -4 addr show dev ${interface} scope global | tail -1 | awk '{print $2}')
+prefix_len=$(echo ${addr} | sed 'sX^.*/XX')
+echo ==== Local address: ${addr}
 local_net=$(ipcalc --nobinary ${addr} | awk '$1=="Network:" {print $2}')
-echo local net: ${local_net}
+echo ==== Local network: ${local_net}
 
-router=$(ip -4 route list dev ${i} | awk '$1=="default" {print $3}' | head -1)
+router=$(ip -4 route list dev ${interface} | awk '$1=="default" {print $3}' | head -1)
 if [ -z ${router} ]; then
     ## This can happen when the default local route is already deleted
-    echo warning: no default route, guessing local router IP address
-    if true; then
+    echo WARNING: no default route, guessing local router IP address
+    if [ -z ${default_router} ]; then
 	## Minimum address on local net is usually right
 	router=$(ipcalc --nobinary ${addr} | awk '$1=="HostMin:" {print $2}')
     else
 	## But sometimes ned to hardwire...
-	router=10.0.0.4
+	router=${default_router}
     fi
 fi
 
-echo local router: ${router}
+echo ==== Local network router: ${router}
 
 ## Test DNS service
 testhost_ip=$(dig +short -t A -q ${testhost})
 if [ -z ${testhost_ip} ]; then
-    echo warning: DNS lookup failure for ${testhost}
+    echo WARNING: Failure on DNS lookup of ${testhost}
 fi
 
 ## DNS servers
 nameservers=$(awk '$1=="nameserver" {print $2}' /etc/resolv.conf)
 if [ -n "${nameservers}" ]; then
-    echo nameservers: ${nameservers}
+    echo ==== DNS servers: ${nameservers}
 else
-    echo error: no DNS servers found
+    echo ERROR: No DNS servers found
     exit 1
 fi
 
 ## Test if local network is up
 if ${test_ping_localnet}; then
-    echo Ping test of  local router and nameserver...
+    echo ==== Ping test of  local network router and DNS servers...
     fping -C1 ${router} ${nameservers} \
-	|| echo warning: ping test failed
+	|| echo WARNING: Ping test failed.
 fi
 
-echo Adding point-to-point routes for non-local nameservers
+echo ==== Adding point-to-point routes for non-local nameservers...
 for n in ${nameservers}; do
-    n_net=$(ipcalc --nobinary ${n}/${class} | awk '$1=="Network:" {print $2}')
+    n_net=$(ipcalc --nobinary ${n}/${prefix_len} | awk '$1=="Network:" {print $2}')
     if [ "${n_net}" != "${local_net}" ]; then
-	echo DNS server ${n}: adding point-to-point route
+	echo ==== Adding point-to-point route for DNS server ${n}
 	ip -4 route add ${n}/32 via ${router}
-    else
-	echo DNS server ${n}: on local network
     fi
 done
 
 ## Bring up tunnel
-echo Creating IP-over-DNS tunnel...
+echo ==== Creating IP-over-DNS tunnel...
 iodine -P ${passwd} ${subdomain}
 
-d=$(ifconfig -a | egrep '^dns' | awk '{print $1}' | head -1)
+tunnel_interface=$(ifconfig -a | egrep '^dns' | awk '{print $1}' | head -1)
 
 ## Find DNS interface
-if [ -z "${d}" ]; then
-    echo warning: cannot find DNS interface, using default
-    d=dns0
+if [ -z "${tunnel_interface}" ]; then
+    echo WARNING: Cannot find DNS tunnel interface, using default.
+    tunnel_interface=dns0
 fi
-echo DNS interface: ${d}
+echo ==== DNS tunnel interface: ${tunnel_interface}
 
-## Figure out other end of tunnel, assuming server uses final octet .1
-tunnel=$(ip -4 address show dev ${d} \
-    | awk '$1=="inet" {print gensub("[.][0-9]*/.*", ".1", 1, $2)}')
+## Figure out router at other end of tunnel, assuming router uses final octet .1
+tunnel=$(ip -4 address show dev ${tunnel_interface} \
+    | awk '$1=="inet" {print gensub("[.][0-9]*/.*", ".1", 1, $2)}' | head -1)
 if [ -n ${tunnel} ]; then
-    echo tunnel remote endpoint: ${tunnel}
+    echo ==== DNS tunnel remote endpoint: ${tunnel}
 else
-    echo error: cannot find tunnel remote endpoint
+    echo ERROR: Cannot find DNS tunnel remote endpoint.
     exit 1
 fi
 
 if ${test_ping_tunnel}; then
-    echo Ping test of local router, nameserver, and tunnel...
-    fping -C1 ${router} ${nameservers} ${tunnel}
+    echo ==== Ping test of local router, nameserver, and tunnel...
+    fping -C1 ${router} ${nameservers} ${tunnel} \
+	|| echo WARNING: Ping test failed.
 fi
 
-echo Setting default route through tunnel...
+echo ==== Setting default route through DNS tunnel...
 ## Remove default via local router
 ip -4 route del default via ${router}
 ## Add default via tunnel
@@ -141,6 +181,7 @@ ip -4 route add default via ${tunnel}
 
 ## Test if all is well
 if ${test_ping_final}; then
-    echo Ping test of local router, nameserver, tunnel, and external host...
-    fping -C1 ${router} ${nameservers} ${tunnel} ${testhost_ip:${testhost}}
+    echo ==== Ping test of local router, nameserver, tunnel, and external host...
+    fping -C1 ${router} ${nameservers} ${tunnel} ${testhost_ip:${testhost}} \
+	|| echo WARNING: Ping test failed.
 fi
