@@ -198,7 +198,7 @@ done
 ## Bring up DNS tunnel
 
 echo ==== Creating IP-over-DNS tunnel...
-iodine -P ${passwd} ${subdomain} || ${continue_on_error}
+iodine -P "${passwd}" "${subdomain}" || ${continue_on_error}
 
 ## Find DNS tunnel interface
 
