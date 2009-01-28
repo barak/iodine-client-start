@@ -67,7 +67,7 @@ echo "${test_ping_final:=true}"			> /dev/null
 echo "${default_router}"			> /dev/null
 
 ## Set if script uses the wrong hardware interface
-echo "{interface}"				> /dev/null
+echo "${interface}"				> /dev/null
 
 ## Set if the script should continue even if a command fails.
 ## Used to test script when running as non-root.
@@ -83,6 +83,7 @@ fi
 ##  ipcalc (for /usr/bin/ipcalc)
 ##  dnsutils (for /usr/bin/dig)
 ##  fping (for /usr/bin/fping)
+##  gawk (for /usr/bin/gawk, to use gensub())
 
 ## The default tunnel MTU is 1024.
 ## If local DNS server restricts to 512 byte packets then do this:
@@ -214,7 +215,7 @@ echo ==== DNS tunnel interface: ${tunnel_interface}
 ## it *prints* it as it sets up the tunnel, so it does know it.)
 
 tunnel_remote=$(ip -4 address show dev ${tunnel_interface} \
-    | awk '$1=="inet" {print gensub("[.][0-9]*/.*", ".1", 1, $2)}' | head -1)
+    | gawk '$1=="inet" {print gensub("[.][0-9]*/.*", ".1", 1, $2)}' | head -1)
 
 if [ -z ${tunnel_remote} ]; then
     echo ERROR: Cannot find DNS tunnel remote endpoint.
