@@ -69,6 +69,11 @@ echo "${default_router}"			> /dev/null
 ## Set if script uses the wrong hardware interface
 echo "${interface}"				> /dev/null
 
+## Set if MTU needs to be manually altered (lowered)
+##  - the default tunnel MTU is 1024.
+##  - if local DNS server restricts to 512 byte packets then use MTU 220
+echo "${mtu}"					> /dev/null
+
 ## Set if the script should continue even if a command fails.
 ## Used to test script when running as non-root.
 if [ $(whoami) = root ]; then
@@ -84,10 +89,6 @@ fi
 ##  dnsutils (for /usr/bin/dig)
 ##  fping (for /usr/bin/fping)
 ##  gawk (for /usr/bin/gawk, to use gensub())
-
-## The default tunnel MTU is 1024.
-## If local DNS server restricts to 512 byte packets then do this:
-# ifconfig ${d} mtu 220
 
 ## TO DO
 ## - avoid double ping when DNS server and local router are the same
@@ -209,6 +210,13 @@ if [ -z "${tunnel_interface}" ]; then
     tunnel_interface=dns0
 fi
 echo ==== DNS tunnel interface: ${tunnel_interface}
+
+## Maybe try to change MTU
+
+if [ -n "${mtu}" ]; then
+    echo ==== Setting MTU of ${tunnel_interface} to ${mtu}
+    ifconfig ${tunnel_interface} mtu ${mtu}
+fi
 
 ## Figure out router at other end of tunnel, assuming router uses final octet .1
 ## (There should be some way to get this information out of iodine, since
