@@ -38,33 +38,61 @@ else
     echo WARNING: Cannot read ${iodine_client_rc}
 fi
 
-echo "${subdomain:=your-subdomain.example.com}"	> /dev/null
-echo "${passwd:=yourpassword}"			> /dev/null
+if [ -z ${subdomain} ]; then
+    read -p "DNS tunnel DNS subdomain: " subdomain
+fi
 
+if [ -z ${subdomain} ]; then
+    echo ERROR: Must set subdomain.
+    exit 1
+fi
+
+if [ -z ${passwd} ]; then
+    read -p "Password for DNS tunnel over ${subdomain}: " passwd
+fi
+
+## This is a host name used for testing DNS and for pinging
 echo "${testhost:=slashdot.org}"		> /dev/null
 
+## Set if local network should be taken down and then up
 echo "${bounce_localnet:=true}"			> /dev/null
+
+## Set for testing network availability via ping at various points
 echo "${test_ping_localnet:=true}"		> /dev/null
 echo "${test_ping_tunnel:=true}"		> /dev/null
 echo "${test_ping_final:=true}"			> /dev/null
 
+## Set if the script cannot find and then incorrectly guesses the
+## local network router
 echo "${default_router}"			> /dev/null
 
-echo "${continue_on_error:=false}"		> /dev/null
+## Set if script uses the wrong hardware interface
+echo "{interface}"				> /dev/null
 
-## DEBIAN PACKAGES TO INSTALL:
+## Set if the script should continue even if a command fails.
+## Used to test script when running as non-root.
+if [ $(whoami) = root ]; then
+    echo "${continue_on_error:=false}"		> /dev/null
+else
+    echo "${continue_on_error:=true}"		> /dev/null
+fi
+
+## DEBIAN PACKAGES TO INSTALL: these are needed to run this script
 ##  iodine (for /usr/sbin/iodine)
 ##  iproute (for /bin/ip)
 ##  ipcalc (for /usr/bin/ipcalc)
 ##  dnsutils (for /usr/bin/dig)
 ##  fping (for /usr/bin/fping)
 
+## The default tunnel MTU is 1024.
 ## If local DNS server restricts to 512 byte packets then do this:
 # ifconfig ${d} mtu 220
-## default MTU is 1024
 
-## Remaining issues:
+## TO DO
 ## - avoid double ping when DNS server and local router are the same
+## - option to not kill existing iodine DNS tunnels, in case there
+##   are meant to be more than one
+## - sanify check whether default_router is on local network
 
 echo ==== Creating IP-over-DNS tunnel over local network connection...
 
@@ -82,7 +110,7 @@ if [ -z ${interface} ]; then
 fi
 
 if [ -z ${interface} ]; then
-    echo ERROR: No network interface found
+    echo ERROR: No network interface found.
     exit 1
 fi
 
@@ -105,21 +133,24 @@ fi
 
 ## Fetch some information about the local network
 
-addr=$(ip -4 addr show dev ${interface} scope global | tail -1 | awk '{print $2}')
+addr=$(ip -4 addr show dev ${interface} scope global \
+    | tail -1 | awk '{print $2}')
 prefix_len=$(echo ${addr} | sed 'sX^.*/XX')
 local_net=$(ipcalc --nobinary ${addr} | awk '$1=="Network:" {print $2}')
 
 echo ==== Local address: ${addr}
 echo ==== Local network: ${local_net}
 
-router=$(ip -4 route list dev ${interface} | awk '$1=="default" {print $3}' | head -1)
+router=$(ip -4 route list dev ${interface} \
+    | awk '$1=="default" {print $3}' | head -1)
 if [ -z ${router} ]; then
     ## This can happen when the default local route is already deleted
-    echo WARNING: no default route, guessing local router IP address
     if [ -z ${default_router} ]; then
+	echo WARNING: no default route, guessing local router IP address.
 	## Minimum address on local net is usually right
 	router=$(ipcalc --nobinary ${addr} | awk '$1=="HostMin:" {print $2}')
     else
+	echo WARNING: no default route, using configured default router.
 	## But sometimes need to hardwire...
 	router=${default_router}
     fi
@@ -131,7 +162,7 @@ echo ==== Local network router: ${router}
 
 testhost_ip=$(dig +short -t A -q ${testhost})
 if [ -z ${testhost_ip} ]; then
-    echo WARNING: Failure on DNS lookup of ${testhost}
+    echo WARNING: Failure on DNS lookup of ${testhost}.
 fi
 
 ## fetch DNS servers
@@ -140,7 +171,7 @@ nameservers=$(awk '$1=="nameserver" {print $2}' /etc/resolv.conf)
 if [ -n "${nameservers}" ]; then
     echo ==== DNS servers: ${nameservers}
 else
-    echo ERROR: No DNS servers found
+    echo ERROR: No DNS servers found.
     exit 1
 fi
 
@@ -187,6 +218,7 @@ if [ -z ${tunnel_remote} ]; then
     echo ERROR: Cannot find DNS tunnel remote endpoint.
     ${continue_on_error}
     ## set something random if debugging
+    echo WARNING: Confabulating DNS tunnel remote endpoint.
     tunnel_remote=192.168.253.1
 fi
 
@@ -210,7 +242,7 @@ ip -4 route add default via ${tunnel_remote} || ${continue_on_error}
 ## Test if all is well
 
 if ${test_ping_final}; then
-    echo ==== Ping test of local router, nameserver, DNS tunnel, and external test host...
+    echo ==== Ping test of local router, nameserver, DNS tunnel, external test host...
     fping -C1 ${router} ${nameservers} ${tunnel_remote} ${testhost_ip:-${testhost}} \
 	|| echo WARNING: Ping test failed.
 fi
