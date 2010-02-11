@@ -11,18 +11,19 @@ INSTALL_DATA    = $(INSTALL) --mode a+r,u+w
 
 HELP2MAN = help2man
 
-all: iodine-client-start.1
+all: iodine-client-start.8
 
-iodine-client-start.1: iodine-client-start
-	$(HELP2MAN) --output=iodine-client-start.1 --no-info ./iodine-client-start
+iodine-client-start.8: iodine-client-start
+	$(HELP2MAN) --output=iodine-client-start.8 --no-info --section=8 \
+	 --name="start an iodine IPv4-over-DNS tunnel" ./iodine-client-start
 
-install: iodine-client-start.1
+install: iodine-client-start.8
 	$(INSTALL_DIR)                         $(DESTDIR)$(sbindir)
 	$(INSTALL_PROGRAM) iodine-client-start $(DESTDIR)$(sbindir)/
 	$(INSTALL_DIR)                         $(DESTDIR)$(mandir)/man1
-	$(INSTALL_DATA) iodine-client-start.1  $(DESTDIR)$(mandir)/man1/
+	$(INSTALL_DATA) iodine-client-start.8  $(DESTDIR)$(mandir)/man1/
 
 clean:
-	-rm -f iodine-client-start.1
+	-rm -f iodine-client-start.8
 
 .PHONY: all install clean
