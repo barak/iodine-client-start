@@ -1,0 +1,5 @@
+This 'iodine-client-start' script sets up and configures an iodine
+IP-over-DNS tunnel as painlessly and automatically as possible.
+
+The Tunnel subdomain and password are read from
+/etc/default/iodine-client, or failing that by querying the user.
