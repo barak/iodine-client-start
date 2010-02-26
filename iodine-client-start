@@ -64,7 +64,7 @@ testhost
 
 bounce_localnet
     Take the local network down and then up again before starting
-    tunnel (default: false)
+    tunnel (default: true)
 
 test_ping_localnet
     Test if the local network is working by pinging the gateway
