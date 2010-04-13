@@ -64,7 +64,7 @@ testhost
 
 bounce_localnet
     Take the local network down and then up again before starting
-    tunnel (default: true)
+    tunnel (default: false)
 
 test_ping_localnet
     Test if the local network is working by pinging the gateway
@@ -163,7 +163,7 @@ fi
 echo "${testhost:=slashdot.org}"		> /dev/null
 
 ## Set if local network should be taken down and then up
-echo "${bounce_localnet:=true}"			> /dev/null
+echo "${bounce_localnet:=false}"		> /dev/null
 
 ## Set for testing network availability via ping at various points
 echo "${test_ping_localnet:=true}"		> /dev/null
