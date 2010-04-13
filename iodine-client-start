@@ -104,7 +104,7 @@ EOF
 
 function version
 {
-    echo iodine-client-start 1.0.1
+    echo iodine-client-start 1.0.2
 }
 
 case $# in
