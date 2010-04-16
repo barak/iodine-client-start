@@ -13,19 +13,22 @@ HELP2MAN = help2man
 
 MANSECT=8
 
-all: iodine-client-start.$(MANSECT)
+PROG=iodine-client-start
 
-iodine-client-start.$(MANSECT): iodine-client-start
-	$(HELP2MAN) --output=iodine-client-start.$(MANSECT) --no-info --section=$(MANSECT) \
-	 --name="start an iodine IPv4-over-DNS tunnel" ./iodine-client-start
+all: $(PROG).$(MANSECT)
 
-install: iodine-client-start.$(MANSECT)
-	$(INSTALL_DIR)				$(DESTDIR)$(sbindir)
-	$(INSTALL_PROGRAM) iodine-client-start	$(DESTDIR)$(sbindir)/
-	$(INSTALL_DIR)				$(DESTDIR)$(mandir)/man$(MANSECT)
-	$(INSTALL_DATA) iodine-client-start.$(MANSECT)	$(DESTDIR)$(mandir)/man$(MANSECT)/
+$(PROG).$(MANSECT): $(PROG)
+	$(HELP2MAN) --no-info --section=$(MANSECT) \
+	 --name="start an iodine IPv4-over-DNS tunnel" \
+	 --output=$(PROG).$(MANSECT) ./$(PROG)
+
+install: $(PROG).$(MANSECT)
+	-$(INSTALL_DIR)			$(DESTDIR)$(sbindir)
+	$(INSTALL_PROGRAM) $(PROG)	$(DESTDIR)$(sbindir)/
+	-$(INSTALL_DIR)			$(DESTDIR)$(mandir)/man$(MANSECT)
+	$(INSTALL_DATA) $(PROG).$(MANSECT) $(DESTDIR)$(mandir)/man$(MANSECT)/
 
 clean:
-	-rm -f iodine-client-start.$(MANSECT)
+	-rm -f $(PROG).$(MANSECT)
 
 .PHONY: all install clean
