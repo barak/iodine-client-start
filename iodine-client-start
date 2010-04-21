@@ -47,6 +47,13 @@ Put two lines in the file /etc/default/iodine-client
 
 	passwd=password_for_that_tunnel
 
+
+or invoke the script with those environment variables set:
+
+	env subdomain=xxx passwd=xxx iodine-client-start
+
+If these are not set, the script will query the user for them.
+
 DETAILS
 
 The configuration file consists of lines which are either comments
