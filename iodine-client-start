@@ -361,7 +361,7 @@ fi
 echo ==== Setting default route through DNS tunnel...
 
 ## Remove default route via local router
-ip -4 route del default via ${router} || ${continue_on_error}
+ip -4 route del default via ${router} || echo WARNING: No default route to delete
 ## Add default via tunnel
 ip -4 route add default via ${tunnel_remote} || ${continue_on_error}
 
