@@ -226,13 +226,13 @@ echo ==== Creating IP-over-DNS tunnel over local network connection...
 
 if [ -z ${interface} ]; then
     interfaces=$(tail --lines=+3 /proc/net/wireless \
-    | tr -d : | awk '{print $1}')
+	| tr -d : | awk '{print $1}')
     for dev in ${interfaces}; do
         if ip -4 addr show dev ${dev} | grep -q inet; then
             interface=${dev}
         fi
     done
-            
+    
 fi
 
 if [ -z ${interface} ]; then
@@ -321,10 +321,10 @@ for n in ${nameservers}; do
     n_net8=$(ipcalc --nobinary ${n}/8 | awk '$1=="Network:" {print $2}')
     if [ "${n_net}" != "${local_net}" ]; then
         if [ "${n_net8}" != "127.0.0.0/8" ]; then
-	        echo ==== Adding point-to-point route for DNS server ${n}
+	    echo ==== Adding point-to-point route for DNS server ${n}
             ## remove point-to-point route first, in case it is already present
-	        ip -4 route del ${n}/32 || true
-	        ip -4 route add ${n}/32 via ${router} || ${continue_on_error}
+	    ip -4 route del ${n}/32 || true
+	    ip -4 route add ${n}/32 via ${router} || ${continue_on_error}
         fi
     fi
 done
