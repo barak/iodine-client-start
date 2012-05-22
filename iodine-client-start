@@ -232,7 +232,6 @@ if [ -z ${interface} ]; then
             interface=${dev}
         fi
     done
-    
 fi
 
 if [ -z ${interface} ]; then
