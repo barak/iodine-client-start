@@ -102,6 +102,11 @@ mtu
     the default tunnel MTU is 1024, and if the local DNS server
     restricts to 512 byte packets you might need to use an MTU of 220.
 
+skip_raw_udp_mode
+    Set "-r" option in iodine command line. With this option, iodine
+    does not try to establish a direct UDP socket to the iodine server
+    on port 53. (default: true).
+
 continue_on_error
     Set if the script should continue even if a command fails.
     Use to test script when running as non-root. Defaults to false
@@ -188,6 +193,9 @@ echo "${interface}"				> /dev/null
 ##  - the default tunnel MTU is 1024.
 ##  - if local DNS server restricts to 512 byte packets then use MTU 220
 echo "${mtu}"					> /dev/null
+
+## Set it if you want try RAW udp mode
+echo "${skip_raw_udp_mode:=true}"           > /dev/null
 
 ## Set if the script should continue even if a command fails.
 ## Used to test script when running as non-root.
@@ -318,7 +326,11 @@ done
 ## Bring up DNS tunnel
 
 echo ==== Creating IP-over-DNS tunnel...
-iodine -P "${passwd}" "${subdomain}" || ${continue_on_error}
+if ${skip_raw_udp_mode}; then
+    iodine_opts="${iodine_opts} -r"
+fi
+
+iodine ${iodine_opts} -P "${passwd}" "${subdomain}" || ${continue_on_error}
 
 ## Find DNS tunnel interface
 
