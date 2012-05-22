@@ -304,11 +304,14 @@ fi
 
 for n in ${nameservers}; do
     n_net=$(ipcalc --nobinary ${n}/${prefix_len} | awk '$1=="Network:" {print $2}')
+    n_net8=$(ipcalc --nobinary ${n}/8 | awk '$1=="Network:" {print $2}')
     if [ "${n_net}" != "${local_net}" ]; then
-	echo ==== Adding point-to-point route for DNS server ${n}
-        ## remove point-to-point route first, in case it is already present
-	ip -4 route del ${n}/32 || true
-	ip -4 route add ${n}/32 via ${router} || ${continue_on_error}
+        if [ "${n_net8}" != "127.0.0.0/8" ]; then
+	        echo ==== Adding point-to-point route for DNS server ${n}
+            ## remove point-to-point route first, in case it is already present
+	        ip -4 route del ${n}/32 || true
+	        ip -4 route add ${n}/32 via ${router} || ${continue_on_error}
+        fi
     fi
 done
 
