@@ -225,8 +225,14 @@ echo ==== Creating IP-over-DNS tunnel over local network connection...
 ## Find a network interface
 
 if [ -z ${interface} ]; then
-    interface=$(tail --lines=+3 /proc/net/wireless \
-	| head -1 | tr -d : | awk '{print $1}')
+    interfaces=$(tail --lines=+3 /proc/net/wireless \
+    | tr -d : | awk '{print $1}')
+    for dev in ${interfaces}; do
+        if ip -4 addr show dev ${dev} | grep -q inet; then
+            interface=${dev}
+        fi
+    done
+            
 fi
 
 if [ -z ${interface} ]; then
