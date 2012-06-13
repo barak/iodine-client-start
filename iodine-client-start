@@ -211,7 +211,16 @@ fi
 ##  ipcalc (for /usr/bin/ipcalc)
 ##  dnsutils (for /usr/bin/dig)
 ##  fping (for /usr/bin/fping)
+##  or oping (for /usr/bin/oping)
 ##  gawk (for /usr/bin/gawk, to use gensub())
+
+if type -P fping > /dev/null; then
+    ping_cmd="fping -C1"
+elif type -P oping > /dev/null; then
+    ping_cmd="oping -c1"
+else
+    ping_cmd="echo would ping"
+fi
 
 ## TO DO
 ## - avoid double ping when DNS server and local router are the same
@@ -309,7 +318,7 @@ fi
 
 if ${test_ping_localnet}; then
     echo ==== Ping test of  local network router and DNS servers...
-    fping -C1 ${router} ${nameservers} \
+    ${ping_cmd} ${router} ${nameservers} \
 	|| echo WARNING: Ping test failed.
 fi
 
@@ -372,7 +381,7 @@ echo ==== DNS tunnel remote endpoint: ${tunnel_remote}
 
 if ${test_ping_tunnel}; then
     echo ==== Ping test of local router, nameserver, and DNS tunnel...
-    fping -C1 ${router} ${nameservers} ${tunnel_remote} \
+    ${ping_cmd} ${router} ${nameservers} ${tunnel_remote} \
 	|| echo WARNING: Ping test failed.
 fi
 
@@ -389,6 +398,6 @@ ip -4 route add default via ${tunnel_remote} || ${continue_on_error}
 
 if ${test_ping_final}; then
     echo ==== Ping test of local router, nameserver, DNS tunnel, external test host...
-    fping -C1 ${router} ${nameservers} ${tunnel_remote} ${testhost_ip:-${testhost}} \
+    ${ping_cmd} ${router} ${nameservers} ${tunnel_remote} ${testhost_ip:-${testhost}} \
 	|| echo WARNING: Ping test failed.
 fi
