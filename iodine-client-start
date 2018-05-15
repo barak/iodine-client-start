@@ -272,16 +272,16 @@ fi
 
 ## Fetch some information about the local network
 
-addr=$(ip -4 addr show dev ${interface} scope global \
-    | tail -1 | awk '{print $2}')
+addr=$(ip -oneline -4 addr show dev ${interface} scope global \
+    | awk '{print $4}' | head -1)
 prefix_len=$(echo ${addr} | sed 'sX^.*/XX')
 local_net=$(ipcalc --nobinary ${addr} | awk '$1=="Network:" {print $2}')
 
 echo ==== Local address: ${addr}
 echo ==== Local network: ${local_net}
 
-router=$(ip -4 route list dev ${interface} \
-    | awk '$1=="default" {print $3}' | head -1)
+router=$(ip -oneline -4 route list dev ${interface} default \
+    | awk '{print $3}' | head -1)
 if [ -z ${router} ]; then
     ## This can happen when the default local route is already deleted
     if [ -z ${default_router} ]; then
@@ -366,8 +366,8 @@ fi
 ## (There should be some way to get this information out of iodine, since
 ## it *prints* it as it sets up the tunnel, so it does know it.)
 
-tunnel_remote=$(ip -4 address show dev ${tunnel_interface} \
-    | gawk '$1=="inet" {print gensub("[.][0-9]*/.*", ".1", 1, $2)}' | head -1)
+tunnel_remote=$(ip -oneline -4 address show dev ${tunnel_interface} \
+    | gawk '$3=="inet" {print gensub("[.][0-9]*/.*", ".1", 1, $4)}' | head -1)
 
 if [ -z ${tunnel_remote} ]; then
     echo ERROR: Cannot find DNS tunnel remote endpoint.
