@@ -237,15 +237,14 @@ if [ -z ${interface} ]; then
     interfaces=$(tail --lines=+3 /proc/net/wireless \
 	| tr -d : | awk '{print $1}')
     for dev in ${interfaces}; do
-        if ip -4 addr show dev ${dev} | grep -q inet; then
+        if ip -oneline -4 addr show dev ${dev} | grep -q inet; then
             interface=${dev}
         fi
     done
 fi
 
 if [ -z ${interface} ]; then
-    interface=$(ifconfig -a | egrep '^[^ ].*encap:Ethernet' \
-	| head -1 | awk '{print $1}')
+    interface=$(ip -oneline link show | awk '$16=="link/ether" {print $2}' | tr -d : | head -1)
 fi
 
 if [ -z ${interface} ]; then
@@ -347,8 +346,7 @@ fi
 iodine ${iodine_opts} -P "${passwd}" "${subdomain}" || ${continue_on_error}
 
 ## Find DNS tunnel interface
-
-tunnel_interface=$(ifconfig -a | egrep '^dns' | awk '{print $1}' | head -1)
+tunnel_interface=$(ip -oneline link show | gawk '$2 ~ /^dns/ {print $2}' | tr -d : | head -1)
 if [ -z "${tunnel_interface}" ]; then
     echo WARNING: Cannot find DNS tunnel interface, using default.
     tunnel_interface=dns0
@@ -359,7 +357,7 @@ echo ==== DNS tunnel interface: ${tunnel_interface}
 
 if [ -n "${mtu}" ]; then
     echo ==== Setting MTU of ${tunnel_interface} to ${mtu}
-    ifconfig ${tunnel_interface} mtu ${mtu}
+    ip link set ${tunnel_interface} mtu ${mtu}
 fi
 
 ## Figure out router at other end of tunnel, assuming router uses final octet .1
